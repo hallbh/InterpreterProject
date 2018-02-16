@@ -1,7 +1,7 @@
 ;Benjamin Hall
 ;Project part 3
 
-(load "parenthec.ss")
+;(load "parenthec.ss")
 
 (define-registers a c env expr k v y)
 (define-program-counter pc)
@@ -62,10 +62,10 @@
 								  (set! env env^)
 								  (set! k v)
 								  (set! pc value-of-cps))]
-		[(let-k b env^ k^) (begin (set! expr b)
-								  (set! env (envr_extend-env v env^))
-								  (set! k k^) 
-								  (set! pc value-of-cps))]
+		[(let-k body env^ k^) (begin (set! expr body)
+								     (set! env (envr_extend-env v env^))
+								     (set! k k^) 
+								     (set! pc value-of-cps))]
 		[(apply-inner-k c^ k^) (begin (set! c c^)
 									  (set! a v)
 									  (set! k k^) 
@@ -125,8 +125,7 @@
 		[(let exp body) (begin (set! expr exp)
 							   (set! k (kt_let-k body env k)) 
 							   (set! pc value-of-cps))]
-		[(lambda body) (begin (set! b body)
-							  (set! v (clos_closure body env))
+		[(lambda body) (begin (set! v (clos_closure body env))
 							  (set! pc apply-k))]
 		[(app rator rand) (begin (set! expr rator)
 								 (set! k (kt_apply-outer-k rand env k)) 
@@ -140,26 +139,26 @@
 ;; 						(* n ((f f) (sub1 n)))))))) 
 ;;	 (* (letcc k ((f f) (throw k ((f f) 4)))) 5))
 
-(define-label main 
-	(begin (set! expr 
-				(exprn_let 
-					(exprn_lambda 
-						(exprn_lambda 
-							(exprn_if 
-								(exprn_zero (exprn_var 0)) 
-								(exprn_const 1) 
-								(exprn_mult (exprn_var 0) 
-											(exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
-													   (exprn_sub1 (exprn_var 0))))))) 
-					(exprn_mult 
-						(exprn_letcc 
-							(exprn_app 
-								(exprn_app (exprn_var 1) (exprn_var 1)) 
-								(exprn_throw (exprn_var 0) 
-											 (exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
-											 			(exprn_const 4))))) 
-						(exprn_const 5))))
-		   (set! env (envr_empty-env))
-		   (set! pc value-of-cps)
-		   (mount-trampoline kt_empty-k k pc)
-		   (printf "Fact 5: ~d\n" v)))
+; (define-label main 
+; 	(begin (set! expr 
+; 				(exprn_let 
+; 					(exprn_lambda 
+; 						(exprn_lambda 
+; 							(exprn_if 
+; 								(exprn_zero (exprn_var 0)) 
+; 								(exprn_const 1) 
+; 								(exprn_mult (exprn_var 0) 
+; 											(exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
+; 													   (exprn_sub1 (exprn_var 0))))))) 
+; 					(exprn_mult 
+; 						(exprn_letcc 
+; 							(exprn_app 
+; 								(exprn_app (exprn_var 1) (exprn_var 1)) 
+; 								(exprn_throw (exprn_var 0) 
+; 											 (exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
+; 											 			(exprn_const 4))))) 
+; 						(exprn_const 5))))
+; 		   (set! env (envr_empty-env))
+; 		   (set! pc value-of-cps)
+; 		   (mount-trampoline kt_empty-k k pc)
+; 		   (printf "Fact 5: ~d\n" v)))

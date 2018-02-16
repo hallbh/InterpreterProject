@@ -1,6 +1,7 @@
 ;Benjamin Hall
 ;Project part 3
 
+(load "pmatch.ss")
 (load "parenthec.ss")
 
 (define-registers a c env expr k v y)
@@ -102,7 +103,8 @@
 	(union-case expr exprn
 		[(const cexp) (begin (set! v cexp)
 						     (set! pc apply-k))]
-		[(var n) (begin (set! y n) 
+		[(var n) (begin (set! k^ k) 
+						(set! y n) 
 						(set! pc apply-env))]
 		[(if test conseq alt) (begin (set! expr test)
 									 (set! k (kt_if-k conseq alt env k)) 

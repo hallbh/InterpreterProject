@@ -7,6 +7,7 @@
 (load "pmatch.ss")
 (load "parenthec.ss")
 
+(define-registers a c env expr k v y)
 
 ;Environment constructors and application
 (define-union envr 
@@ -14,12 +15,15 @@
 	(extend-env a^ env^))
 
 (define apply-env 
-	(lambda (env y k-env)
+	(lambda () ;; env y k
 		(union-case env envr
 			[(empty-env) (errorf 'value-of "unbound identifier")]
 			[(extend-env a^ env^) (if (zero? y)
-									(let* ((k k-env) (v a^)) (apply-k k v))
-									(let* ((env env^) (y (sub1 y)) (k k-env)) (apply-env env y k)))])))
+									(begin (set! v a^) 
+										   (apply-k))
+									(begin (set! env env^) 
+										   (set! y (sub1 y)) 
+										   (apply-env)))])))
 
 ;Continuation constructors and application
 (define-union kt
@@ -27,54 +31,65 @@
 	(mult-inner-k v^ k^)
 	(mult-outer-k nexp2 env k^)
 	(sub-k k^)
-	(zero-k k)
-	(if-k conseq alt env k)
+	(zero-k k^)
+	(if-k conseq alt env k^)
 	(throw-k v^ env^)
 	(let-k b env k^)
 	(apply-inner-k c^ k^)
-	(apply-outer-k rand env k))
+	(apply-outer-k rand env k^))
 
 (define apply-k 
-	(lambda (k v)
+	(lambda () ;; v k
 		(union-case k kt
 			[(empty-k) v]
-			[(mult-inner-k v^ k^) (let* ((v (* v^ v)) (k k^)) (apply-k k v))]
-			[(mult-outer-k nexp2 env k^) (let* ((expr nexp2) 
-											   (v^ v)
-											   (k (kt_mult-inner-k v^ k^))) (value-of-cps expr env k))]
-			[(sub-k k) (let* ((v (sub1 v))) (apply-k k v))]
-			[(zero-k k) (let* ((v (zero? v))) (apply-k k v))]
-			[(if-k conseq alt env k) (if v 
-										(let* ((expr conseq)) (value-of-cps expr env k))
-										(let* ((expr alt)) (value-of-cps expr env k)))]
-			[(throw-k v^ env^) (let* ((expr v^)
-									  (env env^)
-									  (k v)) (value-of-cps expr env k))]
-			[(let-k b env k^) (let* ((expr b)
-									(a^ v)
-									(env^ env)
-									(env (envr_extend-env a^ env^))
-									(k k^)) 
-									(value-of-cps expr env k))]
-			[(apply-inner-k c^ k^) (let* ((c c^)
-										  (a v)
-										  (k k^)) (apply-closure c a k))]
-			[(apply-outer-k rand env k) (let* ((expr rand)
-											   (c^ v)
-											   (k^ k)
-											   (k (kt_apply-inner-k c^ k^))) (value-of-cps rand env k))])))
+			[(mult-inner-k v^ k^) (begin (set! v (* v^ v)) 
+										 (set! k k^)
+										 (apply-k))]
+			[(mult-outer-k nexp2 env k^) (begin (set! expr nexp2) 
+											    (set! k (kt_mult-inner-k v k^))
+											    (value-of-cps))]
+			[(sub-k k^) (begin (set! v (sub1 v))
+							   (set! k k^)
+							   (apply-k))]
+			[(zero-k k^) (begin (set! v (zero? v))
+								(set! k k^)
+							    (apply-k))]
+			[(if-k conseq alt env^ k^) (if v 
+										(begin (set! expr conseq)
+											   (set! env env^)
+											   (set! k k^)
+											   (value-of-cps))
+										(begin (set! expr alt) 
+											   (set! env env^)
+											   (set! k k^)
+											   (value-of-cps)))]
+			[(throw-k v^ env^) (begin (set! expr v^)
+									  (set! env env^)
+									  (set! k v)
+									  (value-of-cps))]
+			[(let-k b env^ k^) (begin (set! expr b)
+									  (set! env (envr_extend-env v env^))
+									  (set! k k^) 
+									  (value-of-cps))]
+			[(apply-inner-k c^ k^) (begin (set! c c^)
+										  (set! a v)
+										  (set! k k^) 
+										  (apply-closure))]
+			[(apply-outer-k rand env^ k^) (begin (set! expr rand)
+												 (set! env env^)
+											     (set! k (kt_apply-inner-k v k^)) 
+											     (value-of-cps))])))
 
 ;Closure construction and application
 (define-union clos 
 	(closure b env))
 
 (define apply-closure 
-	(lambda (c a k)
+	(lambda () ;; c a k
 		(union-case c clos 
-			[(closure b env) (let* ((expr b)
-									(a^ a)
-									(env^ env)
-									(env (envr_extend-env a^ env^))) (value-of-cps expr env k))])))
+			[(closure b env^) (begin (set! expr b)
+									 (set! env (envr_extend-env a env^)) 
+									 (value-of-cps))])))
 
 (define-union exprn 
 	(const cexp) 
@@ -90,33 +105,40 @@
 	(app rator rand))
 
 (define value-of-cps
-	(lambda (expr env k)
+	(lambda () ;; expr env k
 		(union-case expr exprn
-			[(const cexp) (let* ((v cexp)) (apply-k k v))]
-			[(var n) (let* ((k^ k) (y n)) (apply-env env y k^))]
-			[(if test conseq alt) (let* ((expr test)
-										 (k (kt_if-k conseq alt env k))) (value-of-cps expr env k))]
-			[(mult nexp1 nexp2) (let* ((expr nexp1)
-									   (k (kt_mult-outer-k nexp2 env k))) (value-of-cps expr env k))]
-			[(sub1 nexp) (let* ((expr nexp)
-								(k (kt_sub-k k))) (value-of-cps expr env k))]
-			[(zero nexp) (let* ((expr nexp)
-								(k (kt_zero-k k))) (value-of-cps expr env k))]
-			[(letcc body) (let* ((expr body)
-								 (a^ k)
-								 (env^ env)
-								 (env (envr_extend-env a^ env^))) (value-of-cps expr env k))]
-			[(throw kexp vexp) (let* ((expr kexp)
-									  (v^ vexp)
-									  (env^ env)
-									  (k (kt_throw-k v^ env^))) (value-of-cps expr env k))]
-			[(let exp body) (let* ((expr exp)
-								   (b body)
-								   (k (kt_let-k b env k))) (value-of-cps expr env k))]
-			[(lambda body) (let* ((b body)
-								  (v (clos_closure body env))) (apply-k k v))]
-			[(app rator rand) (let* ((expr rator)
-									 (k (kt_apply-outer-k rand env k))) (value-of-cps expr env k))])))
+			[(const cexp) (begin (set! v cexp)
+							     (apply-k))]
+			[(var n) (begin (set! k^ k) 
+							(set! y n) 
+							(apply-env))]
+			[(if test conseq alt) (begin (set! expr test)
+										 (set! k (kt_if-k conseq alt env k)) 
+										 (value-of-cps))]
+			[(mult nexp1 nexp2) (begin (set! expr nexp1)
+									   (set! k (kt_mult-outer-k nexp2 env k)) 
+									   (value-of-cps))]
+			[(sub1 nexp) (begin (set! expr nexp)
+								(set! k (kt_sub-k k))
+								(value-of-cps))]
+			[(zero nexp) (begin (set! expr nexp)
+								(set! k (kt_zero-k k))
+								(value-of-cps))]
+			[(letcc body) (begin (set! expr body)
+								 (set! env (envr_extend-env k env)) 
+								 (value-of-cps))]
+			[(throw kexp vexp) (begin (set! expr kexp)
+									  (set! k (kt_throw-k vexp env)) 
+									  (value-of-cps))]
+			[(let exp body) (begin (set! expr exp)
+								   (set! k (kt_let-k body env k)) 
+								   (value-of-cps))]
+			[(lambda body) (begin (set! b body)
+								  (set! v (clos_closure body env))
+								  (apply-k))]
+			[(app rator rand) (begin (set! expr rator)
+									 (set! k (kt_apply-outer-k rand env k)) 
+									 (value-of-cps))])))
 
 
 ;; (let ((f (lambda (f) 
@@ -128,23 +150,24 @@
 
 (define main 
 	(lambda () 
-		(value-of-cps
-			(exprn_let 
-				(exprn_lambda 
-					(exprn_lambda 
-						(exprn_if 
-							(exprn_zero (exprn_var 0)) 
-							(exprn_const 1) 
-							(exprn_mult (exprn_var 0) 
-										(exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
-												   (exprn_sub1 (exprn_var 0))))))) 
-				(exprn_mult 
-					(exprn_letcc 
-						(exprn_app 
-							(exprn_app (exprn_var 1) (exprn_var 1)) 
-							(exprn_throw (exprn_var 0) 
-										 (exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
-										 			(exprn_const 4))))) 
-					(exprn_const 5))) 
-			(envr_empty-env) 
-			(kt_empty-k))))
+		(begin (set! expr 
+					(exprn_let 
+						(exprn_lambda 
+							(exprn_lambda 
+								(exprn_if 
+									(exprn_zero (exprn_var 0)) 
+									(exprn_const 1) 
+									(exprn_mult (exprn_var 0) 
+												(exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
+														   (exprn_sub1 (exprn_var 0))))))) 
+						(exprn_mult 
+							(exprn_letcc 
+								(exprn_app 
+									(exprn_app (exprn_var 1) (exprn_var 1)) 
+									(exprn_throw (exprn_var 0) 
+												 (exprn_app (exprn_app (exprn_var 1) (exprn_var 1)) 
+												 			(exprn_const 4))))) 
+							(exprn_const 5))))
+			   (set! env (envr_empty-env))
+			   (set! k (kt_empty-k))
+			   (value-of-cps))))
